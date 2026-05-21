@@ -2,11 +2,14 @@
  * Script: demo_employee_creation.sql
  * Purpose: Demo simulation of creating an employee in Oracle HRMS
  * Author: Bob
- * Date: 2026-05-12
- * 
+ * Date: 2026-05-21
+ * Updated: 2026-05-21 - Added Jira integration documentation
+ *
  * Description:
  * This is a demonstration script that simulates the employee creation process
  * and shows expected output without requiring actual Oracle Apps connection.
+ *
+ * Jira Integration: This file is tracked in Jira project SCRUM
  *******************************************************************************/
 
 SET SERVEROUTPUT ON SIZE 1000000
