@@ -1,0 +1,84 @@
+name: Create Issue from Pull Request
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Issue from PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            
+            // Create issue body with PR details
+            const issueBody = `
+            ## 🔗 Related Pull Request
+            This issue was automatically created from Pull Request #${pr.number}
+            
+            **PR Title:** ${pr.title}
+            **PR Author:** @${pr.user.login}
+            **PR URL:** ${pr.html_url}
+            **Branch:** \`${pr.head.ref}\` → \`${pr.base.ref}\`
+            
+            ## 📝 Description
+            ${pr.body || 'No description provided'}
+            
+            ## ✅ Tasks
+            - [ ] Review code changes
+            - [ ] Test functionality
+            - [ ] Approve PR
+            - [ ] Merge to ${pr.base.ref}
+            
+            ## 📊 PR Details
+            - **Commits:** ${pr.commits}
+            - **Changed Files:** ${pr.changed_files}
+            - **Additions:** +${pr.additions}
+            - **Deletions:** -${pr.deletions}
+            
+            ---
+            *This issue will be automatically closed when PR #${pr.number} is merged or closed.*
+            `;
+            
+            // Create the issue
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[PR #${pr.number}] ${pr.title}`,
+              body: issueBody,
+              labels: ['pull-request', 'auto-created'],
+              assignees: [pr.user.login]
+            });
+            
+            // Comment on PR with issue link
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: `✅ Tracking issue created: #${issue.data.number}`
+            });
+            
+            console.log(`Created issue #${issue.data.number} for PR #${pr.number}`);
+
+      - name: Link PR to Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            
+            // Add PR reference to issue
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: pr.body + `\n\n---\n**Tracking Issue:** Will be created automatically`
+            });
+
+# Made with Bob
