@@ -222,16 +222,16 @@ jobs:
           PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
           
           gh pr comment "$PR_NUMBER" --body "ℹ️ **Bob Agent Auto-Merge Skipped**
-
-This PR does not meet the criteria for automatic merging. Please review the checks in the workflow summary.
-
-To enable auto-merge:
-1. Ensure the PR is not in draft mode
-2. Resolve any merge conflicts
-3. Address quality check warnings
-4. Ensure PR has the 'bob-agent' label
-
-Manual review and merge may be required."
+          
+          This PR does not meet the criteria for automatic merging. Please review the checks in the workflow summary.
+          
+          To enable auto-merge:
+          1. Ensure the PR is not in draft mode
+          2. Resolve any merge conflicts
+          3. Address quality check warnings
+          4. Ensure PR has the 'bob-agent' label
+          
+          Manual review and merge may be required."
         env:
           GH_TOKEN: ${{ github.token }}
 
