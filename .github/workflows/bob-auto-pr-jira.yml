@@ -194,8 +194,8 @@ jobs:
           JIRA_URL="${{ secrets.JIRA_BASE_URL }}"
           
           gh pr comment "$PR_NUMBER" --body "🎫 **Jira Ticket Created:** [$JIRA_ISSUE]($JIRA_URL/browse/$JIRA_ISSUE)
-
-This PR is now tracked in Jira. The ticket will be automatically updated when this PR is merged or closed."
+          
+          This PR is now tracked in Jira. The ticket will be automatically updated when this PR is merged or closed."
           
           echo "✅ Updated PR #$PR_NUMBER with Jira link: $JIRA_ISSUE"
         env:

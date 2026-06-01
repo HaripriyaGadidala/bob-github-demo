@@ -160,14 +160,14 @@ jobs:
           PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
           
           gh pr review "$PR_NUMBER" --approve --body "✅ **Auto-approved by Bob Agent**
-
-This PR has passed all automated checks:
-- ✅ No merge conflicts
-- ✅ Quality checks passed
-- ✅ Bob Agent verified changes
-- ✅ Ready for merge
-
-*Proceeding with automatic merge...*"
+          
+          This PR has passed all automated checks:
+          - ✅ No merge conflicts
+          - ✅ Quality checks passed
+          - ✅ Bob Agent verified changes
+          - ✅ Ready for merge
+          
+          *Proceeding with automatic merge...*"
           
           echo "✅ PR #$PR_NUMBER approved"
         env:
