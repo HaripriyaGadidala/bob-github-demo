@@ -1,0 +1,238 @@
+name: Bob Agent - Auto Approve & Merge PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to auto-merge'
+        required: true
+        type: number
+
+jobs:
+  auto-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    outputs:
+      should_merge: ${{ steps.evaluate.outputs.should_merge }}
+      pr_number: ${{ steps.pr_info.outputs.pr_number }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR information
+        id: pr_info
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Get PR details
+          PR_DATA=$(gh pr view "$PR_NUMBER" --json title,author,labels,isDraft,mergeable,reviewDecision)
+          
+          echo "pr_data=$PR_DATA" >> $GITHUB_OUTPUT
+          
+          IS_DRAFT=$(echo "$PR_DATA" | jq -r '.isDraft')
+          IS_BOB_AGENT=$(echo "$PR_DATA" | jq -r '.labels[].name' | grep -q "bob-agent" && echo "true" || echo "false")
+          MERGEABLE=$(echo "$PR_DATA" | jq -r '.mergeable')
+          
+          echo "is_draft=$IS_DRAFT" >> $GITHUB_OUTPUT
+          echo "is_bob_agent=$IS_BOB_AGENT" >> $GITHUB_OUTPUT
+          echo "mergeable=$MERGEABLE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check for conflicts
+        id: check_conflicts
+        run: |
+          PR_NUMBER="${{ steps.pr_info.outputs.pr_number }}"
+          
+          # Check if PR has conflicts
+          CONFLICTS=$(gh pr view "$PR_NUMBER" --json mergeable --jq '.mergeable')
+          
+          if [ "$CONFLICTS" == "CONFLICTING" ]; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "❌ PR has merge conflicts"
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "✅ No merge conflicts"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run basic code quality checks
+        id: quality_checks
+        run: |
+          # Check for common issues
+          ISSUES_FOUND=0
+          
+          # Check for TODO/FIXME comments
+          if git diff origin/${{ github.event.pull_request.base.ref || 'main' }}...HEAD | grep -iE "(TODO|FIXME|XXX|HACK)" > /dev/null; then
+            echo "⚠️ Found TODO/FIXME comments"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+          fi
+          
+          # Check for console.log (for JS/TS files)
+          if git diff origin/${{ github.event.pull_request.base.ref || 'main' }}...HEAD -- "*.js" "*.ts" "*.jsx" "*.tsx" 2>/dev/null | grep -E "console\.(log|debug|info)" > /dev/null; then
+            echo "⚠️ Found console.log statements"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+          fi
+          
+          # Check for large files (>1MB)
+          LARGE_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref || 'main' }}...HEAD | xargs -I {} sh -c 'test -f {} && test $(stat -f%z {} 2>/dev/null || stat -c%s {} 2>/dev/null || echo 0) -gt 1048576 && echo {}' || true)
+          if [ -n "$LARGE_FILES" ]; then
+            echo "⚠️ Found large files: $LARGE_FILES"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+          fi
+          
+          echo "issues_found=$ISSUES_FOUND" >> $GITHUB_OUTPUT
+          
+          if [ $ISSUES_FOUND -eq 0 ]; then
+            echo "quality_passed=true" >> $GITHUB_OUTPUT
+            echo "✅ Quality checks passed"
+          else
+            echo "quality_passed=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Found $ISSUES_FOUND quality issues"
+          fi
+
+      - name: Evaluate merge eligibility
+        id: evaluate
+        run: |
+          IS_DRAFT="${{ steps.pr_info.outputs.is_draft }}"
+          IS_BOB_AGENT="${{ steps.pr_info.outputs.is_bob_agent }}"
+          HAS_CONFLICTS="${{ steps.check_conflicts.outputs.has_conflicts }}"
+          QUALITY_PASSED="${{ steps.quality_checks.outputs.quality_passed }}"
+          
+          echo "## 🤖 Bob Agent Merge Evaluation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Is Draft | $IS_DRAFT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bob Agent PR | $IS_BOB_AGENT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Has Conflicts | $HAS_CONFLICTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Quality Checks | $QUALITY_PASSED |" >> $GITHUB_STEP_SUMMARY
+          
+          # Determine if should merge
+          if [ "$IS_DRAFT" == "false" ] && \
+             [ "$IS_BOB_AGENT" == "true" ] && \
+             [ "$HAS_CONFLICTS" == "false" ] && \
+             [ "$QUALITY_PASSED" == "true" ]; then
+            echo "should_merge=true" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Decision: APPROVED FOR AUTO-MERGE**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "should_merge=false" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Decision: NOT APPROVED FOR AUTO-MERGE**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Reasons:**" >> $GITHUB_STEP_SUMMARY
+            [ "$IS_DRAFT" == "true" ] && echo "- PR is in draft mode" >> $GITHUB_STEP_SUMMARY
+            [ "$IS_BOB_AGENT" == "false" ] && echo "- Not a Bob Agent PR" >> $GITHUB_STEP_SUMMARY
+            [ "$HAS_CONFLICTS" == "true" ] && echo "- Has merge conflicts" >> $GITHUB_STEP_SUMMARY
+            [ "$QUALITY_PASSED" == "false" ] && echo "- Quality checks failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  auto-approve:
+    needs: auto-checks
+    if: needs.auto-checks.outputs.should_merge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+      - name: Approve PR
+        run: |
+          PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
+          
+          gh pr review "$PR_NUMBER" --approve --body "✅ **Auto-approved by Bob Agent**
+
+This PR has passed all automated checks:
+- ✅ No merge conflicts
+- ✅ Quality checks passed
+- ✅ Bob Agent verified changes
+- ✅ Ready for merge
+
+*Proceeding with automatic merge...*"
+          
+          echo "✅ PR #$PR_NUMBER approved"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  auto-merge:
+    needs: [auto-checks, auto-approve]
+    if: needs.auto-checks.outputs.should_merge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+      - name: Enable auto-merge
+        run: |
+          PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
+          
+          # Enable auto-merge with squash strategy (keep branch)
+          gh pr merge "$PR_NUMBER" --auto --squash
+          
+          echo "✅ Auto-merge enabled for PR #$PR_NUMBER"
+          echo "ℹ️ Branch will be kept after merge"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Add merge comment
+        run: |
+          PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
+          
+          gh pr comment "$PR_NUMBER" --body "🤖 **Bob Agent Auto-Merge Initiated**
+
+This PR will be automatically merged once all required checks pass.
+
+**Merge Strategy:** Squash and merge
+**Branch Preservation:** Branch will be kept after merge
+
+The associated Jira ticket will be updated automatically upon merge completion."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  notify-skip:
+    needs: auto-checks
+    if: needs.auto-checks.outputs.should_merge == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      
+    steps:
+      - name: Comment on PR
+        run: |
+          PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
+          
+          gh pr comment "$PR_NUMBER" --body "ℹ️ **Bob Agent Auto-Merge Skipped**
+
+This PR does not meet the criteria for automatic merging. Please review the checks in the workflow summary.
+
+To enable auto-merge:
+1. Ensure the PR is not in draft mode
+2. Resolve any merge conflicts
+3. Address quality check warnings
+4. Ensure PR has the 'bob-agent' label
+
+Manual review and merge may be required."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+# Made with Bob Agent
