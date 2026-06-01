@@ -199,13 +199,13 @@ jobs:
           PR_NUMBER="${{ needs.auto-checks.outputs.pr_number }}"
           
           gh pr comment "$PR_NUMBER" --body "🤖 **Bob Agent Auto-Merge Initiated**
-
-This PR will be automatically merged once all required checks pass.
-
-**Merge Strategy:** Squash and merge
-**Branch Preservation:** Branch will be kept after merge
-
-The associated Jira ticket will be updated automatically upon merge completion."
+          
+          This PR will be automatically merged once all required checks pass.
+          
+          **Merge Strategy:** Squash and merge
+          **Branch Preservation:** Branch will be kept after merge
+          
+          The associated Jira ticket will be updated automatically upon merge completion."
         env:
           GH_TOKEN: ${{ github.token }}
 
