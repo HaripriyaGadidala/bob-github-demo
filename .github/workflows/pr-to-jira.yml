@@ -1,0 +1,44 @@
+name: Create JIRA Issue on PR
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  create-jira-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create JIRA Issue
+        uses: atlassian/gajira-create@v3
+        with:
+          project: DEV
+          issuetype: Task
+          summary: "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+          description: |
+            Pull Request: ${{ github.event.pull_request.html_url }}
+            
+            **Description:**
+            ${{ github.event.pull_request.body }}
+            
+            **Author:** ${{ github.event.pull_request.user.login }}
+            **Branch:** ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+      - name: Comment PR with JIRA Issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issueKey = process.env.JIRA_ISSUE_KEY;
+            if (issueKey) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `✅ JIRA Issue created: [${issueKey}](${{ secrets.JIRA_BASE_URL }}/browse/${issueKey})`
+              });
+            }
+
+# Made with Bob
