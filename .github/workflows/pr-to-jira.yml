@@ -25,6 +25,9 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
         run: |
+          # Strip any trailing slash or whitespace from JIRA_BASE_URL
+          JIRA_BASE_URL=$(echo "$JIRA_BASE_URL" | tr -d '[:space:]' | sed 's|/$||')
+
           SUMMARY="PR #${PR_NUMBER}: ${PR_TITLE}"
           DESCRIPTION="Pull Request: ${PR_URL}\n\nAuthor: ${PR_AUTHOR}\nBranch: ${PR_HEAD} -> ${PR_BASE}"
 
@@ -47,9 +50,13 @@ jobs:
               }
             }')
 
+          # --http1.1 prevents curl exit code 43 (HTTP/2 stream error with Atlassian)
+          # base64 -w 0 prevents newline in encoded string which corrupts the Authorization header
+          AUTH=$(printf '%s:%s' "${JIRA_USER_EMAIL}" "${JIRA_API_TOKEN}" | base64 -w 0)
           RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --http1.1 \
             -X POST \
-            -H "Authorization: Basic $(echo -n "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" | base64)" \
+            -H "Authorization: Basic ${AUTH}" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             --data "$PAYLOAD" \
