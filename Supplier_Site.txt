@@ -1,0 +1,133 @@
+DECLARE
+  -- ============================================================
+  -- Oracle EBS: Create Supplier Site via AP_VENDOR_PUB_PKG
+  -- API: AP_VENDOR_PUB_PKG.Create_Vendor_Site
+  -- ============================================================
+
+  -- Input / Control variables
+  l_vendor_id           NUMBER        := NULL;   -- Set existing Vendor ID here
+  l_vendor_number       VARCHAR2(30)  := 'SUPP-001'; -- Supplier Number
+
+  -- Supplier Site Record
+  l_vendor_site_rec     AP_VENDOR_PUB_PKG.r_vendor_site_rec_type;
+
+  -- API Return Variables
+  l_vendor_site_id      NUMBER;
+  l_party_site_id       NUMBER;
+  l_location_id         NUMBER;
+  l_return_status       VARCHAR2(1);
+  l_msg_count           NUMBER;
+  l_msg_data            VARCHAR2(4000);
+
+  -- Error handling
+  l_msg_index_out       NUMBER;
+  l_message             VARCHAR2(2000);
+
+BEGIN
+  -- ----------------------------------------------------------------
+  -- Step 1: Initialize Oracle Application Environment
+  -- ----------------------------------------------------------------
+  FND_GLOBAL.Apps_Initialize(
+    user_id      => 1234,     -- Replace with valid FND_USER.USER_ID
+    resp_id      => 20639,    -- Replace with valid Responsibility ID (AP)
+    resp_appl_id => 200       -- Application ID: 200 = Payables
+  );
+
+  -- ----------------------------------------------------------------
+  -- Step 2: Fetch vendor_id from vendor number (if not known)
+  -- ----------------------------------------------------------------
+  IF l_vendor_id IS NULL THEN
+    SELECT vendor_id
+      INTO l_vendor_id
+      FROM ap_suppliers
+     WHERE vendor_number = l_vendor_number
+       AND ROWNUM = 1;
+  END IF;
+
+  DBMS_OUTPUT.PUT_LINE('Vendor ID: ' || l_vendor_id);
+
+  -- ----------------------------------------------------------------
+  -- Step 3: Populate the Vendor Site Record
+  -- ----------------------------------------------------------------
+  l_vendor_site_rec.vendor_id            := l_vendor_id;
+  l_vendor_site_rec.vendor_site_code     := 'MAIN-SITE';   -- Site code (unique per vendor)
+  l_vendor_site_rec.purchasing_site_flag := 'Y';
+  l_vendor_site_rec.pay_site_flag        := 'Y';
+  l_vendor_site_rec.rfq_only_site_flag   := 'N';
+  l_vendor_site_rec.attention_ar_flag    := 'N';
+
+  -- Address Details (via TCA — Party Site)
+  l_vendor_site_rec.address_line1        := '123 Main Street';
+  l_vendor_site_rec.address_line2        := 'Suite 400';
+  l_vendor_site_rec.city                 := 'Chicago';
+  l_vendor_site_rec.state                := 'IL';
+  l_vendor_site_rec.zip                  := '60601';
+  l_vendor_site_rec.country              := 'US';
+
+  -- Operating Unit Assignment
+  l_vendor_site_rec.org_id               := 101;    -- Replace with your OU Org ID
+
+  -- Payment Terms
+  l_vendor_site_rec.terms_id             := 1001;   -- Replace with AP_TERMS.TERM_ID
+
+  -- Currency
+  l_vendor_site_rec.invoice_currency_code := 'USD';
+  l_vendor_site_rec.payment_currency_code := 'USD';
+
+  -- Optional: Tax
+  l_vendor_site_rec.vat_registration_num  := NULL;
+
+  -- ----------------------------------------------------------------
+  -- Step 4: Call the Standard API
+  -- ----------------------------------------------------------------
+  AP_VENDOR_PUB_PKG.Create_Vendor_Site(
+    p_api_version       => 1.0,
+    p_init_msg_list     => FND_API.G_TRUE,
+    p_commit            => FND_API.G_FALSE,      -- Manual commit below
+    p_vendor_site_rec   => l_vendor_site_rec,
+    x_vendor_site_id    => l_vendor_site_id,
+    x_party_site_id     => l_party_site_id,
+    x_location_id       => l_location_id,
+    x_return_status     => l_return_status,
+    x_msg_count         => l_msg_count,
+    x_msg_data          => l_msg_data
+  );
+
+  -- ----------------------------------------------------------------
+  -- Step 5: Handle API Response
+  -- ----------------------------------------------------------------
+  IF l_return_status = FND_API.G_RET_STS_SUCCESS THEN
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SUCCESS: Supplier Site Created.');
+    DBMS_OUTPUT.PUT_LINE('  Vendor Site ID : ' || l_vendor_site_id);
+    DBMS_OUTPUT.PUT_LINE('  Party Site ID  : ' || l_party_site_id);
+    DBMS_OUTPUT.PUT_LINE('  Location ID    : ' || l_location_id);
+
+  ELSE
+
+    ROLLBACK;
+    DBMS_OUTPUT.PUT_LINE('FAILED: Return Status = ' || l_return_status);
+
+    -- Extract all API error messages
+    FOR i IN 1 .. l_msg_count LOOP
+      FND_MSG_PUB.Get(
+        p_msg_index     => i,
+        p_encoded       => FND_API.G_FALSE,
+        p_data          => l_message,
+        p_msg_index_out => l_msg_index_out
+      );
+      DBMS_OUTPUT.PUT_LINE('Error [' || i || ']: ' || l_message);
+    END LOOP;
+
+  END IF;
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    DBMS_OUTPUT.PUT_LINE('ERROR: Vendor not found for number: ' || l_vendor_number);
+    ROLLBACK;
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('UNEXPECTED ERROR: ' || SQLERRM);
+    ROLLBACK;
+END;
+/
