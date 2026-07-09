@@ -25,6 +25,16 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
         run: |
+          # ---- Debug: validate JIRA_BASE_URL ----
+          echo "JIRA_BASE_URL length: ${#JIRA_BASE_URL}"
+          echo "JIRA_BASE_URL starts with: $(echo "$JIRA_BASE_URL" | cut -c1-10)"
+          # Strip any trailing slash or whitespace
+          JIRA_BASE_URL=$(echo "$JIRA_BASE_URL" | tr -d '[:space:]' | sed 's|/$||')
+          echo "Resolved host: $(echo "$JIRA_BASE_URL" | sed 's|https\?://||' | cut -d'/' -f1)"
+          # Test DNS resolution
+          HOST=$(echo "$JIRA_BASE_URL" | sed 's|https\?://||' | cut -d'/' -f1)
+          nslookup "$HOST" || echo "DNS lookup failed for: $HOST"
+
           SUMMARY="PR #${PR_NUMBER}: ${PR_TITLE}"
           DESCRIPTION="Pull Request: ${PR_URL}\n\nAuthor: ${PR_AUTHOR}\nBranch: ${PR_HEAD} -> ${PR_BASE}"
 
