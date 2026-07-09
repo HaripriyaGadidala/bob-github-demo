@@ -36,10 +36,9 @@ jobs:
           echo "Testing DNS for: $HOST"
           nslookup "$HOST" && echo "DNS OK" || echo "DNS lookup failed for: $HOST"
           echo "Testing HTTP connectivity..."
-          curl -v --max-time 10 "${JIRA_BASE_URL}/rest/api/3/myself" \
+          curl -v --http1.1 --max-time 10 "${JIRA_BASE_URL}/rest/api/3/myself" \
             -H "Authorization: Basic $(echo -n "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" | base64)" \
             -H "Accept: application/json" 2>&1 | tail -30 || true
-
           SUMMARY="PR #${PR_NUMBER}: ${PR_TITLE}"
           DESCRIPTION="Pull Request: ${PR_URL}\n\nAuthor: ${PR_AUTHOR}\nBranch: ${PR_HEAD} -> ${PR_BASE}"
 
@@ -62,7 +61,9 @@ jobs:
               }
             }')
 
+          # --http1.1 prevents curl exit code 43 (HTTP/2 stream error with Atlassian)
           RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --http1.1 \
             -X POST \
             -H "Authorization: Basic $(echo -n "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" | base64)" \
             -H "Content-Type: application/json" \
