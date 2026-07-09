@@ -31,9 +31,14 @@ jobs:
           # Strip any trailing slash or whitespace
           JIRA_BASE_URL=$(echo "$JIRA_BASE_URL" | tr -d '[:space:]' | sed 's|/$||')
           echo "Resolved host: $(echo "$JIRA_BASE_URL" | sed 's|https\?://||' | cut -d'/' -f1)"
-          # Test DNS resolution
+          # Test DNS resolution and connectivity
           HOST=$(echo "$JIRA_BASE_URL" | sed 's|https\?://||' | cut -d'/' -f1)
-          nslookup "$HOST" || echo "DNS lookup failed for: $HOST"
+          echo "Testing DNS for: $HOST"
+          nslookup "$HOST" && echo "DNS OK" || echo "DNS lookup failed for: $HOST"
+          echo "Testing HTTP connectivity..."
+          curl -v --max-time 10 "${JIRA_BASE_URL}/rest/api/3/myself" \
+            -H "Authorization: Basic $(echo -n "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" | base64)" \
+            -H "Accept: application/json" 2>&1 | tail -30 || true
 
           SUMMARY="PR #${PR_NUMBER}: ${PR_TITLE}"
           DESCRIPTION="Pull Request: ${PR_URL}\n\nAuthor: ${PR_AUTHOR}\nBranch: ${PR_HEAD} -> ${PR_BASE}"
